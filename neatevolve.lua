@@ -420,6 +420,7 @@ end
 
 function randomNeuron(genes, nonInput)
 	-- not sure - add neurons that can be modified to table and then randomly pick one of those?
+	-- ohh - used to decide genes to connect when mutating - not sure if nonInput is actually respected
 	local neurons = {}
 	if not nonInput then
 		for i=1,Inputs do
@@ -464,11 +465,13 @@ function containsLink(genes, link)
 	end
 end
 
+-- if mutating connections, change gene weights in genome
 function pointMutate(genome)
 	local step = genome.mutationRates["step"]
 	
 	for i=1,#genome.genes do
 		local gene = genome.genes[i]
+		-- either modify weight or assign totally new weight
 		if math.random() < PerturbChance then
 			gene.weight = gene.weight + math.random() * step*2 - step
 		else
@@ -477,10 +480,12 @@ function pointMutate(genome)
 	end
 end
 
+-- add a new connection to the genome from an input to a random node
 function linkMutate(genome, forceBias)
 	local neuron1 = randomNeuron(genome.genes, false)
 	local neuron2 = randomNeuron(genome.genes, true)
 	 
+	-- ensure that neuron 1 is an input neuron
 	local newLink = newGene()
 	if neuron1 <= Inputs and neuron2 <= Inputs then
 		--Both input nodes
@@ -495,6 +500,7 @@ function linkMutate(genome, forceBias)
 
 	newLink.into = neuron1
 	newLink.out = neuron2
+	-- last input node is the bias? 
 	if forceBias then
 		newLink.into = Inputs
 	end
@@ -508,19 +514,24 @@ function linkMutate(genome, forceBias)
 	table.insert(genome.genes, newLink)
 end
 
+-- mutate a single connection to become two connections with a node inbetween that is mathematically identical for the current run
 function nodeMutate(genome)
 	if #genome.genes == 0 then
 		return
 	end
 
+	-- increment value to effectively make a new neuron to go inbetween the two new connections
 	genome.maxneuron = genome.maxneuron + 1
 
+	-- pick a random connection thats enabled
 	local gene = genome.genes[math.random(1,#genome.genes)]
 	if not gene.enabled then
 		return
 	end
+	-- disable it so two can take its place
 	gene.enabled = false
 	
+	-- conection into neuron
 	local gene1 = copyGene(gene)
 	gene1.out = genome.maxneuron
 	gene1.weight = 1.0
@@ -528,6 +539,7 @@ function nodeMutate(genome)
 	gene1.enabled = true
 	table.insert(genome.genes, gene1)
 	
+	-- connection out of neuron to whatever the original connection was to
 	local gene2 = copyGene(gene)
 	gene2.into = genome.maxneuron
 	gene2.innovation = newInnovation()
@@ -535,6 +547,7 @@ function nodeMutate(genome)
 	table.insert(genome.genes, gene2)
 end
 
+-- mutate to either enable or disable a connection - which action to take is determined by parameter
 function enableDisableMutate(genome, enable)
 	local candidates = {}
 	for _,gene in pairs(genome.genes) do
@@ -552,6 +565,7 @@ function enableDisableMutate(genome, enable)
 end
 
 function mutate(genome)
+	-- loop through mutation rate values, randomly increasing and decreasing them
 	for mutation,rate in pairs(genome.mutationRates) do
 		if math.random(1,2) == 1 then
 			genome.mutationRates[mutation] = 0.95*rate
@@ -560,6 +574,7 @@ function mutate(genome)
 		end
 	end
 
+	-- loop through all mutation rates and randomly decide whether or not to perform the given action/actions
 	if math.random() < genome.mutationRates["connections"] then
 		pointMutate(genome)
 	end
@@ -605,6 +620,7 @@ function mutate(genome)
 	end
 end
 
+-- TODO: HERE
 function disjoint(genes1, genes2)
 	local i1 = {}
 	for i = 1,#genes1 do
