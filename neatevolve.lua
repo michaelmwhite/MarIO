@@ -620,7 +620,7 @@ function mutate(genome)
 	end
 end
 
--- TODO: HERE
+-- return the number of disjoint genes between two sets of genes
 function disjoint(genes1, genes2)
 	local i1 = {}
 	for i = 1,#genes1 do
@@ -654,6 +654,7 @@ function disjoint(genes1, genes2)
 	return disjointGenes / n
 end
 
+-- calculates average difference in weights per genes in genomes
 function weights(genes1, genes2)
 	local i2 = {}
 	for i = 1,#genes2 do
@@ -675,12 +676,14 @@ function weights(genes1, genes2)
 	return sum / coincident
 end
 	
+-- determin if same species - roughly equivalent of equation 1 in Stanley's paper
 function sameSpecies(genome1, genome2)
 	local dd = DeltaDisjoint*disjoint(genome1.genes, genome2.genes)
 	local dw = DeltaWeights*weights(genome1.genes, genome2.genes) 
 	return dd + dw < DeltaThreshold
 end
 
+-- rank all genomes regardless of species
 function rankGlobally()
 	local global = {}
 	for s = 1,#pool.species do
@@ -698,6 +701,7 @@ function rankGlobally()
 	end
 end
 
+-- calculate average rank of a species
 function calculateAverageFitness(species)
 	local total = 0
 	
@@ -709,6 +713,7 @@ function calculateAverageFitness(species)
 	species.averageFitness = total / #species.genomes
 end
 
+-- total up the average fitnesses of each species
 function totalAverageFitness()
 	local total = 0
 	for s = 1,#pool.species do
@@ -719,6 +724,7 @@ function totalAverageFitness()
 	return total
 end
 
+-- either halve species or cut to only 1 genome
 function cullSpecies(cutToOne)
 	for s = 1,#pool.species do
 		local species = pool.species[s]
@@ -737,6 +743,7 @@ function cullSpecies(cutToOne)
 	end
 end
 
+-- crossover a child or simply copy 1 and then mutate
 function breedChild(species)
 	local child = {}
 	if math.random() < CrossoverChance then
@@ -753,6 +760,7 @@ function breedChild(species)
 	return child
 end
 
+-- add only species to next generation that aren't stale
 function removeStaleSpecies()
 	local survived = {}
 
@@ -763,6 +771,7 @@ function removeStaleSpecies()
 			return (a.fitness > b.fitness)
 		end)
 		
+		-- if top fitness improved
 		if species.genomes[1].fitness > species.topFitness then
 			species.topFitness = species.genomes[1].fitness
 			species.staleness = 0
@@ -777,6 +786,7 @@ function removeStaleSpecies()
 	pool.species = survived
 end
 
+-- only keep species with fitness in upper half
 function removeWeakSpecies()
 	local survived = {}
 
@@ -792,7 +802,7 @@ function removeWeakSpecies()
 	pool.species = survived
 end
 
-
+-- sort passed in genome to appropriate species
 function addToSpecies(child)
 	local foundSpecies = false
 	for s=1,#pool.species do
@@ -811,29 +821,37 @@ function addToSpecies(child)
 end
 
 function newGeneration()
+	-- remove lower 50% of each species
 	cullSpecies(false) -- Cull the bottom half of each species
 	rankGlobally()
+	-- remove stale species
 	removeStaleSpecies()
 	rankGlobally()
 	for s = 1,#pool.species do
 		local species = pool.species[s]
 		calculateAverageFitness(species)
 	end
+	-- remove species in lower 50% fitness
 	removeWeakSpecies()
 	local sum = totalAverageFitness()
 	local children = {}
+	-- breed for species, but put children in new generation
 	for s = 1,#pool.species do
 		local species = pool.species[s]
 		breed = math.floor(species.averageFitness / sum * Population) - 1
 		for i=1,breed do
+			-- species is either crossed over or copied - not both
 			table.insert(children, breedChild(species))
 		end
 	end
+	-- cut current genomes to only top of each species
 	cullSpecies(true) -- Cull all but the top member of each species
+	-- while population is less than what it should be, breed new children or add copy of genome
 	while #children + #pool.species < Population do
 		local species = pool.species[math.random(1, #pool.species)]
 		table.insert(children, breedChild(species))
 	end
+	-- sort into species
 	for c=1,#children do
 		local child = children[c]
 		addToSpecies(child)
@@ -844,10 +862,12 @@ function newGeneration()
 	writeFile("backup." .. pool.generation .. "." .. forms.gettext(saveLoadFile))
 end
 	
+-- create initial pool
 function initializePool()
 	pool = newPool()
 
 	for i=1,Population do
+		-- mutate is called in basic genome to differentiate between genomes - still though, sorted into species
 		basic = basicGenome()
 		addToSpecies(basic)
 	end
@@ -855,6 +875,7 @@ function initializePool()
 	initializeRun()
 end
 
+-- reset control inputs to all false
 function clearJoypad()
 	controller = {}
 	for b = 1,#ButtonNames do
@@ -881,6 +902,7 @@ function evaluateCurrent()
 	local genome = species.genomes[pool.currentGenome]
 
 	inputs = getInputs()
+	-- generates ouput controls from evaluating the genome
 	controller = evaluateNetwork(genome.network, inputs)
 	
 	if controller["P1 Left"] and controller["P1 Right"] then
@@ -899,7 +921,7 @@ if pool == nil then
 	initializePool()
 end
 
-
+-- pick next genome or loop back around and make the next generation
 function nextGenome()
 	pool.currentGenome = pool.currentGenome + 1
 	if pool.currentGenome > #pool.species[pool.currentSpecies].genomes then
@@ -1183,6 +1205,7 @@ playTopButton = forms.button(form, "Play Top", playTop, 5, 170)
 hideBanner = forms.checkbox(form, "Hide Banner", 5, 190)
 
 
+-- a lot of gui updating code, but also handles running neural network/ indirectly updating when network has finished its run
 while true do
 	local backgroundColor = 0xD0FFFFFF
 	if not forms.ischecked(hideBanner) then
@@ -1196,12 +1219,15 @@ while true do
 		displayGenome(genome)
 	end
 	
+	-- evaluate network every 5 frames to see next control that should be done
 	if pool.currentFrame%5 == 0 then
+		-- get controls neural network says to use
 		evaluateCurrent()
 	end
 
 	joypad.set(controller)
 
+	-- if mario has not moved to right, begin frame count down until considered timed out
 	getPositions()
 	if marioX > rightmost then
 		rightmost = marioX
@@ -1210,7 +1236,7 @@ while true do
 	
 	timeout = timeout - 1
 	
-	
+	-- give more lenience on timeout farther into the level you are
 	local timeoutBonus = pool.currentFrame / 4
 	if timeout + timeoutBonus <= 0 then
 		local fitness = rightmost - pool.currentFrame / 2
@@ -1223,14 +1249,17 @@ while true do
 		if fitness == 0 then
 			fitness = -1
 		end
+		-- fitness is the indicator of where the program is currently executing in this weird loop
 		genome.fitness = fitness
 		
+		-- handle if new fitness record
 		if fitness > pool.maxFitness then
 			pool.maxFitness = fitness
 			forms.settext(maxFitnessLabel, "Max Fitness: " .. math.floor(pool.maxFitness))
 			writeFile("backup." .. pool.generation .. "." .. forms.gettext(saveLoadFile))
 		end
 		
+		-- reset currentspecies and current genome and increment them until you find a non measure genome; once found, reset for new run
 		console.writeline("Gen " .. pool.generation .. " species " .. pool.currentSpecies .. " genome " .. pool.currentGenome .. " fitness: " .. fitness)
 		pool.currentSpecies = 1
 		pool.currentGenome = 1
