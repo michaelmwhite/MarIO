@@ -19,12 +19,11 @@ ButtonNames = {
 }
 
 BoxRadius = 6
-InputSize = (BoxRadius*2+1)*(BoxRadius*2+1)
 
-Inputs = InputSize+1
-Outputs = #ButtonNames
+NumInputs = (BoxRadius*2+1)*(BoxRadius*2+1)+1
+NumOutputs = #ButtonNames
 
-Population = 300
+NumPopulations = 300
 DeltaDisjoint = 2.0
 DeltaWeights = 0.4
 DeltaThreshold = 1.0
@@ -36,7 +35,6 @@ PerturbChance = 0.90
 CrossoverChance = 0.75
 LinkMutationChance = 2.0
 NodeMutationChance = 0.50
-BiasMutationChance = 0.40
 StepSize = 0.1
 DisableMutationChance = 0.4
 EnableMutationChance = 0.2
@@ -143,43 +141,78 @@ function sigmoid(x)
 	return 2/(1+math.exp(-4.9*x))-1
 end
 
-function newInnovation()
-    -- TODO
+function nextInnovationNum(network)
+    local currentInnovationNum = network.innovationNum
+    network.innovationNum = network.innovationNum + 1
+    return currentInnovationNum
 end
 
+-- arrays in Lua begin with 1
 function newPool()
-	-- TODO
+    local pool = {}
+    pool.species = {}
+    pool.generation = 0
+    pool.innovationNum = NumOutputs
+    pool.currentSpecies = 1
+    pool.currentGenome = 1
+    pool.currentFrame = 0
+    pool.maxFitness = 0
+
+    for i=1,NumPopulations do
+        newNetwork = mutate(newNetwork())
+        addToSpecies(newNetwork)
+    end
+
+    -- initializerun
+
+    return pool
 end
 
 function newSpecies()
 	-- TODO
 end
 
-function newGenome()
+function newNetwork()
+    local network = {}
+    network.connections = {}
+    network.nodeCount = NumInputs
+    network.fitness = 0
+    network.rank = 0
+end
+
+function copyNetwork(genome)
 	-- TODO
 end
 
-function copyGenome(genome)
+function basicNetwork()
 	-- TODO
 end
 
-function basicGenome()
+function newConnection(network)
+    local connection = {}
+    connection.input = 0
+    connection.output = 0
+    connection.weight = (math.random()-.5) * 2
+    connection.enabled = true
+    connection.innovationNum = nextInnovationNum(network)
+    return connection
+end
+
+function copyConnection(connection)
+    local copyConnection = {}
+    copyConnection.input = connection.input
+    copyConnection.output = connection.output
+    copyConnection.weight = connection.weight
+    copyConnection.enabled = connection.enabled
+    copyConnection.innovationNum = connection.innovationNum
+    return copyConnection
+end
+
+function newNode()
 	-- TODO
 end
 
-function newGene()
-	-- TODO
-end
-
-function copyGene(gene)
-	-- TODO
-end
-
-function newNeuron()
-	-- TODO
-end
-
-function generateNetwork(genome)
+function buildNetwork(genome)
 	-- TODO
 end
 
@@ -191,37 +224,84 @@ function crossover(g1, g2)
 	-- TODO
 end
 
-function randomNeuron(genes, nonInput)
-	-- TODO
-end
-
 --return if connection exists, regardless of weights
-function containsLink(genes, link)
+function containsConnection(genes, link)
 	-- TODO
 end
 
 -- if mutating connections, change gene weights in genome
-function pointMutate(genome)
-	-- TODO
+function pointMutate(network)
+    for i=1,#network.connections do
+        local connection = network.connections[i]
+        if math.random() < PerturbChance then
+            connection.weight = connection.weight + (math.random() - .5) * step
+        else
+            connection.weight = (math.random() - .5) * 2
+        end
+    end
 end
 
--- add a new connection to the genome from an input to a random node
-function linkMutate(genome, forceBias)
-	-- TODO
+-- add a new connection to the genome between two random nodes
+function connectionMutate(network)
+    local node1 = network.connections[math.random(#network.connections)]
+    local node2 = network.connections[math.random(#network.connections)]
+    if node1 == node2 then
+        return
+    end
+    local newConnection = newConnection()
+    -- TODO: CYCLICAL CONNECTIONS A PROBLEM? - make 1 always an input?
+    newConnection.input = node1
+    newConnection.output = node2
+    table.insert(network.connections, newConnection)
 end
 
 -- mutate a single connection to become two connections with a node inbetween that is mathematically identical for the current run
-function nodeMutate(genome)
-	-- TODO
+function nodeMutate(network)
+    if #network.connections == 0 then
+        return
+    end
+    network.nodeCount = network.nodeCount + 1
+    local connection = network.connections[math.random(#network.connections)]
+    if not connection.enabled then
+        return
+    end
+    local connection1 = copyConnection()
+    connection1.output = network.nodeCount
+    connection1.weight = 1.0
+    connection1.innovationNum = nextInnovationNum(network)
+    table.insert(network.connections, connection1)
+
+    local connection2 = copyConnection()
+    connection2.input = network.nodeCount
+    connection2.innovationNum = nextInnovationNum(network)
+    table.insert(network.connections, connection2)
 end
 
 -- mutate to either enable or disable a connection - which action to take is determined by parameter
-function enableDisableMutate(genome, enable)
+function enableMutate(genome)
+	-- TODO: HERE
+end
+
+function disableMutate(genome)
 	-- TODO
 end
 
-function mutate(genome)
-	-- TODO
+function mutate(network)
+    if math.random() < MutateConnectionsChance then
+        pointMutate(network)
+    end
+    if math.random() < LinkMutationChance then
+        connectionMutate(network, false)
+    end
+    if math.random() < NodeMutationChance then
+        nodeMutate(network)
+    end
+    if math.random() < EnableMutationChance then
+        enableMutate(network)
+    end
+    if math.random() < DisableMutationChance then
+        disableMutate(network)
+    end
 end
 
 -- return the number of disjoint genes between two sets of genes
@@ -310,7 +390,7 @@ if pool == nil then
 end
 
 -- pick next genome or loop back around and make the next generation
-function nextGenome()
+function nextNetwork()
 	-- TODO
 end
 
@@ -322,5 +402,43 @@ end
 
 -- a lot of gui updating code, but also handles running neural network/ indirectly updating when network has finished its run
 while true do
-	-- TODO
+	-- evaluate network every 5 frames to see next control that should be done
+	if pool.currentFrame%5 == 0 then
+		-- get controls neural network says to use
+		evaluateCurrent()
+	end
+
+	joypad.set(controller)
+
+	-- if mario has not moved to right, begin frame count down until considered timed out
+	getPositions()
+	if marioX > rightmost then
+		rightmost = marioX
+		timeout = TimeoutConstant
+	end
+	
+	timeout = timeout - 1
+	
+	-- give more lenience on timeout farther into the level you are
+	local timeoutBonus = pool.currentFrame / 4
+	if timeout + timeoutBonus <= 0 then
+		local fitness = rightmost - pool.currentFrame / 2
+		if rightmost > 4816 then
+			fitness = fitness + 1000
+		end
+		if fitness == 0 then
+			fitness = -1
+		end
+		-- fitness is the indicator of where the program is currently executing in this weird loop
+		genome.fitness = fitness
+		
+		-- handle if new fitness record
+		
+		-- reset currentspecies and current genome and increment them until you find a non measure genome; once found, reset for new run
+
+    end
+    
+	pool.currentFrame = pool.currentFrame + 1
+
+	emu.frameadvance();
 end
