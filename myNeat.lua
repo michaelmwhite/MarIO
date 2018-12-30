@@ -156,7 +156,6 @@ function newPool()
     pool.currentSpecies = 1
     pool.currentGenome = 1
     pool.currentFrame = 0
-    pool.maxFitness = 0
 
     for i=1,NumPopulations do
         newNetwork = mutate(newNetwork())
@@ -169,7 +168,10 @@ function newPool()
 end
 
 function newSpecies()
-	-- TODO
+    local species = {}
+    species.staleness = 0
+    species.networks = {}
+    return species
 end
 
 function newNetwork()
@@ -178,6 +180,7 @@ function newNetwork()
     network.nodeCount = NumInputs
     network.fitness = 0
     network.rank = 0
+    return network
 end
 
 function copyNetwork(genome)
@@ -230,7 +233,7 @@ function containsConnection(genes, link)
 end
 
 -- if mutating connections, change gene weights in genome
-function pointMutate(network)
+function connectionWeightsMutate(network)
     for i=1,#network.connections do
         local connection = network.connections[i]
         if math.random() < PerturbChance then
@@ -242,7 +245,7 @@ function pointMutate(network)
 end
 
 -- add a new connection to the genome between two random nodes
-function connectionMutate(network)
+function addConnectionMutate(network)
     local node1 = network.connections[math.random(#network.connections)]
     local node2 = network.connections[math.random(#network.connections)]
     if node1 == node2 then
@@ -256,7 +259,7 @@ function connectionMutate(network)
 end
 
 -- mutate a single connection to become two connections with a node inbetween that is mathematically identical for the current run
-function nodeMutate(network)
+function addNodeMutate(network)
     if #network.connections == 0 then
         return
     end
@@ -277,24 +280,42 @@ function nodeMutate(network)
     table.insert(network.connections, connection2)
 end
 
--- mutate to either enable or disable a connection - which action to take is determined by parameter
-function enableMutate(genome)
-	-- TODO: HERE
+-- mutate to either enable or disable a connection
+function enableMutate(network)
+    local disabledConnections = {}
+    for i=1,#network.connections do
+        if not network.connections[i].enabled then
+            table.insert(disabledConnections, network.connections[i])
+        end
+    end
+    if #disabledConnections == 0 then
+        return
+    end
+    disabledConnections[math.random(#disabledConnections)].enabled = true
 end
 
-function disableMutate(genome)
-	-- TODO
+function disableMutate(network)
+	local enabledConnections = {}
+    for i=1,#network.connections do
+        if network.connections[i].enabled then
+            table.insert(enabledConnections, network.connections[i])
+        end
+    end
+    if #enabledConnections == 0 then
+        return
+    end
+    enabledConnections[math.random(#enabledConnections)].enabled = true
 end
 
 function mutate(network)
     if math.random() < MutateConnectionsChance then
-        pointMutate(network)
+        connectionWeightsMutate(network)
     end
     if math.random() < LinkMutationChance then
-        connectionMutate(network, false)
+        addConnectionMutate(network)
     end
     if math.random() < NodeMutationChance then
-        nodeMutate(network)
+        addNodeMutate(network)
     end
     if math.random() < EnableMutationChance then
         enableMutate(network)
@@ -305,18 +326,56 @@ function mutate(network)
 end
 
 -- return the number of disjoint genes between two sets of genes
-function disjoint(genes1, genes2)
-	-- TODO
+function numDisjointOrExcess(connections1, connections2)
+    local disjointExcessCount = 0
+    local innovations1 = {}
+    for i=1,#connections1 do
+        if connections1[i].enabled then 
+            innovations1[connections1[i].innovationNum] = true
+        end
+    end
+    local innovations2 = {}
+    for i=1,#connections2 do
+        if connections2[i].enabled then
+            innovations2[connections2[i].innovationNum] = true
+        end
+    end
+    for i=1,#connections1 do
+        if not innovations2[connections1[i].innovationNum] then
+            disjointExcessCount = disjointExcessCount + 1
+        end
+    end
+    for i=1,#connection2 do
+        if not innovations1[connections2[i].innovationNum] then
+            disjointExcessCount = disjointExcessCount + 1
+        end
+    end
+    return disjointExcessCount
 end
 
 -- calculates average difference in weights per genes in genomes
-function weights(genes1, genes2)
-	-- TODO
+function avgWeightsDiff(connections1, connections2)
+    local sum = 0
+    local numDiff = 0
+    local innovations2 = {}
+    for i=1,#connections2 do
+        innovations2[connections2[i].innovationNum] = connections2[i]
+    end
+    for i=1,#connections1 then
+        local connection2 = innovations2[connections1[i].innovationNum]
+        if connection2 ~= nil then
+            sum = sum + math.abs(connections1[i].weight - connection2.weight)
+            numDiff = numDiff + 1
+        end
+    end
+    return sum / numDiff
 end
 	
 -- determin if same species - roughly equivalent of equation 1 in Stanley's paper
-function sameSpecies(genome1, genome2)
-	-- TODO
+function isSameSpecies(network1, network2)
+    local disjointDelta = DeltaDisjoint * numDisjointOrExcess(network1.connections, network2.connections)
+    local weightDelta = DeltaWeights * avgWeightsDiff(network1.connections, nertwork2.connections)
+    return disjointDelta + weightDelta < DeltaThreshold
 end
 
 -- rank all genomes regardless of species
@@ -355,8 +414,16 @@ function removeWeakSpecies()
 end
 
 -- sort passed in genome to appropriate species
-function addToSpecies(child)
-	-- TODO
+function addToSpecies(network)
+    for i=1,#pool.species do
+        if isSameSpecies(pool.species[i].networks[1], network) then
+            table.insert(pool.species[i].networks, network)
+            return
+        end
+    end
+    local newSpecies = newSpecies()
+    table.insert(newSpecies.networks, network)
+    table.insert(pool.species, newSpecies)
 end
 
 function newGeneration()
