@@ -156,14 +156,10 @@ function newPool()
     pool.currentSpecies = 1
     pool.currentGenome = 1
     pool.currentFrame = 0
-
     for i=1,NumPopulations do
         newNetwork = mutate(newNetwork())
         addToSpecies(newNetwork)
     end
-
-    -- initializerun
-
     return pool
 end
 
@@ -174,10 +170,14 @@ function newSpecies()
     return species
 end
 
+-- TODO: CHANGE IMPLEMENTATION - keep table of nodes, ensure when adding connections that it is proper direction (nodeNum - 
+--  node never outputs to node with num less than it), then evaluate
+-- or maybe not have list of nodes - somewhat pointless as nodes are just inputs (already stored) and outputs(already stored) w/ sigmoid function
 function newNetwork()
     local network = {}
     network.connections = {}
-    network.nodeCount = NumInputs
+    -- first x ids are reserved for inputs, next y ids are reserved for outputs, anything after is hidden layer node
+    network.nodeCount = NumInputs + NumOutputs
     network.fitness = 0
     network.rank = 0
     return network
@@ -193,8 +193,8 @@ end
 
 function newConnection(network)
     local connection = {}
-    connection.input = 0
-    connection.output = 0
+    connection.inputId = 0
+    connection.outputId = 0
     connection.weight = (math.random()-.5) * 2
     connection.enabled = true
     connection.innovationNum = nextInnovationNum(network)
@@ -203,8 +203,8 @@ end
 
 function copyConnection(connection)
     local copyConnection = {}
-    copyConnection.input = connection.input
-    copyConnection.output = connection.output
+    copyConnection.inputId = connection.inputId
+    copyConnection.outputId = connection.outputId
     copyConnection.weight = connection.weight
     copyConnection.enabled = connection.enabled
     copyConnection.innovationNum = connection.innovationNum
@@ -212,15 +212,33 @@ function copyConnection(connection)
 end
 
 function newNode()
-	-- TODO
+    local node = {}
+    node.value = 0.0
+    return node
 end
 
-function buildNetwork(genome)
-	-- TODO
+-- rather than have to keep track of nodes and combinations, generate nodes in network at time of evaluation
+function buildNodes(network)
+    local nodes = {}
+    -- generate input and output nodes - this part is not chronologically ordered
+    for i=1,NumInputs+NumOutputs do
+        nodes[i] = newNode()
+    end
+    -- NOTE: important not to ignore disabled when building node network - this should be entirely deterministic as index numbers represent
+    -- id numbers in my system
+    -- 
+    for i=1,#network.connections do 
+        local connection = network.connections[i]
+        if nodes[connection.outputId] == nil then
+            nodes[connection.outputId] = newNode()
+        end
+    end
+    return nodes
 end
 
-function evaluateNetwork(network, inputs)
-	-- TODO
+function evaluateNetwork(network)
+    local nodes = buildNodes(network)
+    
 end
 
 function crossover(g1, g2)
@@ -246,15 +264,19 @@ end
 
 -- add a new connection to the genome between two random nodes
 function addConnectionMutate(network)
-    local node1 = network.connections[math.random(#network.connections)]
-    local node2 = network.connections[math.random(#network.connections)]
-    if node1 == node2 then
+    if network.nodeCount < 2 then
+        print("nodeCount should always be greater than 1")
         return
     end
+    local node1Id = math.random(network.nodeCount)
+    local node2Id = math.random(network.nodeCount)
+    while node1Id == node2Id do
+        node2Id = math.random(network.nodeCount)
+    end
     local newConnection = newConnection()
-    -- TODO: CYCLICAL CONNECTIONS A PROBLEM? - make 1 always an input?
-    newConnection.input = node1
-    newConnection.output = node2
+    -- NOTE: CYCLICAL CONNECTIONS A PROBLEM - address in future, for now, will have value of 0.0 at time of evaluation
+    newConnection.inputId = node1Id
+    newConnection.outputId = node2Id
     table.insert(network.connections, newConnection)
 end
 
@@ -265,17 +287,15 @@ function addNodeMutate(network)
     end
     network.nodeCount = network.nodeCount + 1
     local connection = network.connections[math.random(#network.connections)]
-    if not connection.enabled then
-        return
-    end
+
     local connection1 = copyConnection()
-    connection1.output = network.nodeCount
+    connection1.outputId = network.nodeCount
     connection1.weight = 1.0
     connection1.innovationNum = nextInnovationNum(network)
     table.insert(network.connections, connection1)
 
     local connection2 = copyConnection()
-    connection2.input = network.nodeCount
+    connection2.inputId = network.nodeCount
     connection2.innovationNum = nextInnovationNum(network)
     table.insert(network.connections, connection2)
 end
@@ -452,10 +472,6 @@ function evaluateCurrent()
     -- TODO
 end
 
-if pool == nil then
-	initializePool()
-end
-
 -- pick next genome or loop back around and make the next generation
 function nextNetwork()
 	-- TODO
@@ -466,6 +482,19 @@ function fitnessAlreadyMeasured()
 end
 
 -- TODO: END OF NN CODE
+-- BEGINNING OF "MAIN()"
+
+--INITIALIZE RUN CODE - TODO - REWORK!
+pool = newPool()
+savestate.load(Filename)
+rightmost = 0
+timeout = TimeoutConstant
+clearJoypad()
+local species = pool.species[pool.currentSpecies]
+local genome = species.genomes[pool.currentGenome]
+generateNetwork(genome)
+evaluateCurrent()
+
 
 -- a lot of gui updating code, but also handles running neural network/ indirectly updating when network has finished its run
 while true do
