@@ -166,20 +166,18 @@ end
 function newSpecies()
     local species = {}
     species.staleness = 0
+    species.prevMaxFitness = 0
+    species.averageFitness = 0
     species.networks = {}
     return species
 end
 
--- TODO: CHANGE IMPLEMENTATION - keep table of nodes, ensure when adding connections that it is proper direction (nodeNum - 
---  node never outputs to node with num less than it), then evaluate
--- or maybe not have list of nodes - somewhat pointless as nodes are just inputs (already stored) and outputs(already stored) w/ sigmoid function
 function newNetwork()
     local network = {}
     network.connections = {}
     -- first x ids are reserved for inputs, next y ids are reserved for outputs, anything after is hidden layer node
     network.nodeCount = NumInputs + NumOutputs
     network.fitness = 0
-    network.rank = 0
     return network
 end
 
@@ -444,13 +442,25 @@ function isSameSpecies(network1, network2)
 end
 
 -- rank all genomes regardless of species
-function rankGlobally()
-	-- TODO
+function sortSpeciesNetworks(speciesTable)
+    for i=1,#speciesTable do
+        -- put best fitnesses at lower indexes
+        table.sort(speciesTable[i].networks, function(a,b)
+            return (a.fitness > b.fitness)
+        end)
+    end
 end
 
 -- calculate average rank of a species
-function calculateAverageFitness(species)
-	-- TODO
+function calculateAverageFitnesses(speciesTable)
+    for i=1,#speciesTable do
+        local species = speciesTable[i]
+        local sum = 0
+        for j=1,#species.networks do
+            sum = sum + species.networks[j].fitness
+        end
+        species.averageFitness = sum/#species.networks
+    end
 end
 
 -- total up the average fitnesses of each species
@@ -458,19 +468,45 @@ function totalAverageFitness()
 	-- TODO
 end
 
--- either halve species or cut to only 1 genome
-function cullSpecies(cutToOne)
-	-- TODO
+-- remove lower 50% of each species
+function cullSpeciesNetworks(speciesTable)
+    for i=1,#speciesTable do
+        local species = speciesTable[i]
+        for j=#species.networks,#species.networks/2+1 do
+            table.remove(speciesTable, j)
+        end
+    end
 end
 
 -- crossover a child or simply copy 1 and then mutate
 function breedChild(species)
-	-- TODO
+    -- TODO: IMPLEMENT FUNCTIONS USED IN BREEDCHILD
+    local child = {}
+    if math.random() < CrossoverChance then
+        network1 = species.networks[math.random(#species.networks)]
+        network2 = species.networks[math.random(#species.networks)]
+        child = crossover(network1, network2)
+    else
+        child = copyNetwork(species.networks[math.random(#species.networks)])
+    end
+    mutate(child)
+    return child
 end
 
 -- add only species to next generation that aren't stale
-function removeStaleSpecies()
-	-- TODO
+function removeStaleSpecies(speciesTable)
+    for i=#speciesTable,1 do 
+        local species = speciesTable[i]
+        if species.prevMaxFitness > species.networks[1].fitness then
+            species.staleness = species.staleness + 1
+            if species.staleness > StaleSpecies then
+                table.remove(speciesTable, i)
+            end
+        else
+            species.staleness = 0
+            species.prevMaxFitness = species.networks[1].fitness
+        end
+    end
 end
 
 -- only keep species with fitness in upper half
@@ -491,13 +527,33 @@ function addToSpecies(network)
     table.insert(pool.species, newSpecies)
 end
 
-function newGeneration()
-	-- TODO
-end
-	
--- create initial pool
-function initializePool()
-	-- TODO
+function initNewGeneration()
+    -- TODO: HERE IS THE NEXT THING
+    -- sort networks in species by fitness
+    sortSpeciesNetworks(pool.species)
+    -- if fitness didn't improve, add to stale value and remove if stale
+    removeStaleSpecies(pool.species)
+    -- remove lower 50% of each species
+    cullSpeciesNetworks(pool.species)
+    -- calculate average fitness of each species
+    calculateAverageFitnesses(pool.species)
+    -- breed children for new generation - num children is a function of average fitness of that species
+        -- num children = total fitness/average fitness of all species
+    local nextGenNetworks = {}
+    local globalAverageFitness = 0
+    for i=1,#pool.species do
+        globalAverageFitness = globalAverageFitness + pool.species[i].averageFitness
+    end
+    globalAverageFitness = globalAverageFitness / #pool.species
+    for i=1,#pool.species do
+        local numChildren = pool.species[i].averageFitness * #pool.species[i].networks / globalAverageFitness
+        for j=1,numChildren do
+            table.insert(nextGenNetworks, breedChild(pool.species[i]))
+        end
+    end
+    -- breed random children if more room left under population ceiling
+    -- sort the new generation's networks into species
+    -- increment pool generation
 end
 
 -- reset control inputs to all false
