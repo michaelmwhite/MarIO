@@ -214,6 +214,7 @@ end
 function newNode()
     local node = {}
     node.value = 0.0
+    node.inputConnections = {}
     return node
 end
 
@@ -226,19 +227,63 @@ function buildNodes(network)
     end
     -- NOTE: important not to ignore disabled when building node network - this should be entirely deterministic as index numbers represent
     -- id numbers in my system
-    -- 
     for i=1,#network.connections do 
         local connection = network.connections[i]
+        -- make all appropriate nodes
+        if nodes[connection.inputId] == nil then
+            nodes[connection.inputId] = newNode()
+        end
         if nodes[connection.outputId] == nil then
             nodes[connection.outputId] = newNode()
         end
+        table.insert(nodes[connection.outputId].inputConnections, connection)
     end
     return nodes
 end
 
 function evaluateNetwork(network)
+    local outputCommands = {}
+
     local nodes = buildNodes(network)
-    
+    local inputs = getInputs()
+    if #inputs ~= NumInputs then
+		print("Incorrect number of neural network inputs.")
+		return
+    end
+    -- fill in inputs
+    for i=1,NumInputs do
+        nodes[i].value = inputs[i]
+    end
+    -- calculate hidden layer nodes
+    for i=NumInputs+NumOutputs+1,#nodes do
+        local sum = 0
+        for j=1,#nodes[i].inputConnections do
+            local connection = nodes[i].inputConnections[j]
+            if connection.enabled then
+                sum = sum + connection.weight * nodes[connection.inputId].value
+            end
+        end
+        nodes[i].value = sigmoid(sum)
+    end
+    -- calculate output nodes
+    for i=NumInputs+1,NumOutputs do
+        local sum = 0
+        for j=1,#nodes[i].inputConnections do
+            local connection = nodes[i].inputConnections[j]
+            if connection.enabled then
+                sum = sum + connection.weight * nodes[connection.inputId].value
+            end
+        end
+        nodes[i].value = sigmoid(sum)
+        -- write command for controller
+        local button = "P1 " .. ButtonNames[i-NumInputs+1]
+        if nodes[i].value > 0 then
+            outputCommands[button] = true
+        else
+            outputCommands[button] = false
+        end
+    end
+	return outputCommands
 end
 
 function crossover(g1, g2)
