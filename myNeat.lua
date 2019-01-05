@@ -181,8 +181,12 @@ function newNetwork()
     return network
 end
 
-function copyNetwork(genome)
-	-- TODO
+function copyNetwork(network)
+    local newNetwork = {}
+    newNetwork.connections = network.connections
+    newNetwork.nodeCount = network.nodeCount
+    newNetwork.fitness = network.fitness
+    return newNetwork
 end
 
 function basicNetwork()
@@ -284,8 +288,32 @@ function evaluateNetwork(network)
 	return outputCommands
 end
 
-function crossover(g1, g2)
-	-- TODO
+function crossover(network1, network2)
+    -- make network 1 the more fit one
+    if network1.fitness < network2.fitness then
+        local temp = network1
+        network1 = network2
+        network2 = temp
+    end
+    -- make a lookup table for the network2's connections
+    local innovations2 = {}
+    for i=1,#network2.connections do
+        local connection = network2.connections[i]
+        innovations2[connection.innovationNum] = connection
+    end
+    -- copy connections from 2 or 1, defaulting to 1 if excess or disjoint
+    local childConnections = {}
+    for i=1,#network1.connections do
+        local connection1 = network1.connections[i]
+        if innovations2[connection1.innovationNum] ~= nil and math.random(2) == 1 then
+            childConnections[i] = innovations2[connection1.innovationNum]
+        else
+            childConnections[i] = connection1
+        end
+    end
+    local child = copyNetwork(network1)
+    child.connections = childConnections
+    return child
 end
 
 --return if connection exists, regardless of weights
@@ -480,7 +508,6 @@ end
 
 -- crossover a child or simply copy 1 and then mutate
 function breedChild(species)
-    -- TODO: IMPLEMENT FUNCTIONS USED IN BREEDCHILD
     local child = {}
     if math.random() < CrossoverChance then
         network1 = species.networks[math.random(#species.networks)]
@@ -528,7 +555,6 @@ function addToSpecies(network)
 end
 
 function initNewGeneration()
-    -- TODO: HERE IS THE NEXT THING
     -- sort networks in species by fitness
     sortSpeciesNetworks(pool.species)
     -- if fitness didn't improve, add to stale value and remove if stale
@@ -552,8 +578,20 @@ function initNewGeneration()
         end
     end
     -- breed random children if more room left under population ceiling
+    while #nextGenNetworks < NumPopulations do
+        local randomSpecies = pool.species[math.random(#pool.species)]
+        table.insert(nextGenNetworks ,breedChild(randomSpecies))
+    end
+    -- configure pool for next gen
+    pool.species = {}
+    pool.generation = pool.generation + 1
+    pool.currentSpecies = 1
+    pool.currentGenome = 1
+    pool.currentFrame = 0
     -- sort the new generation's networks into species
-    -- increment pool generation
+    for i=1,#nextGenNetworks do
+        addToSpecies(nextGenNetworks[i])
+    end
 end
 
 -- reset control inputs to all false
