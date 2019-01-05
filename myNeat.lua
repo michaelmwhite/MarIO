@@ -136,7 +136,7 @@ function getInputs()
 end
 
 -- My original code, based on SethBling's implementation of a NEAT Network.
--- TODO: START OF NN CODE
+-- NOTE: START OF NN CODE
 function sigmoid(x)
 	return 2/(1+math.exp(-4.9*x))-1
 end
@@ -187,10 +187,6 @@ function copyNetwork(network)
     newNetwork.nodeCount = network.nodeCount
     newNetwork.fitness = network.fitness
     return newNetwork
-end
-
-function basicNetwork()
-	-- TODO
 end
 
 function newConnection(network)
@@ -314,11 +310,6 @@ function crossover(network1, network2)
     local child = copyNetwork(network1)
     child.connections = childConnections
     return child
-end
-
---return if connection exists, regardless of weights
-function containsConnection(genes, link)
-	-- TODO
 end
 
 -- if mutating connections, change gene weights in genome
@@ -491,11 +482,6 @@ function calculateAverageFitnesses(speciesTable)
     end
 end
 
--- total up the average fitnesses of each species
-function totalAverageFitness()
-	-- TODO
-end
-
 -- remove lower 50% of each species
 function cullSpeciesNetworks(speciesTable)
     for i=1,#speciesTable do
@@ -534,11 +520,6 @@ function removeStaleSpecies(speciesTable)
             species.prevMaxFitness = species.networks[1].fitness
         end
     end
-end
-
--- only keep species with fitness in upper half
-function removeWeakSpecies()
-	-- TODO
 end
 
 -- sort passed in genome to appropriate species
@@ -603,24 +584,7 @@ function clearJoypad()
 	joypad.set(controller)
 end
 
-function initializeRun()
-	-- TODO
-end
-
-function evaluateCurrent()
-    -- TODO
-end
-
--- pick next genome or loop back around and make the next generation
-function nextNetwork()
-	-- TODO
-end
-
-function fitnessAlreadyMeasured()
-	-- TODO
-end
-
--- TODO: END OF NN CODE
+-- NOTE: END OF NN CODE
 -- BEGINNING OF "MAIN()"
 
 --INITIALIZE RUN CODE - TODO - REWORK!
