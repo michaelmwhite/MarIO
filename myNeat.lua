@@ -154,7 +154,7 @@ function newPool()
     pool.generation = 0
     pool.innovationNum = NumOutputs
     pool.currentSpecies = 1
-    pool.currentGenome = 1
+    pool.currentNetwork = 1
     pool.currentFrame = 0
     for i=1,NumPopulations do
         newNetwork = mutate(newNetwork())
@@ -567,7 +567,7 @@ function initNewGeneration()
     pool.species = {}
     pool.generation = pool.generation + 1
     pool.currentSpecies = 1
-    pool.currentGenome = 1
+    pool.currentNetwork = 1
     pool.currentFrame = 0
     -- sort the new generation's networks into species
     for i=1,#nextGenNetworks do
@@ -584,6 +584,20 @@ function clearJoypad()
 	joypad.set(controller)
 end
 
+-- returning true if next generation not needed, false if it is
+function findNextNetwork(pool)
+    local species = pool.species[pool.currentSpecies]
+    if species.networks[pool.currentNetwork + 1] ~= nil then
+        pool.currentNetwork = pool.currentNetwork + 1
+        return true
+    elseif pool.species[pool.currentSpecies + 1] ~= nil then
+        pool.currentSpecies = pool.currentSpecies + 1
+        return findNextNetwork(pool)
+    else
+        return false
+    end
+end
+
 -- NOTE: END OF NN CODE
 -- BEGINNING OF "MAIN()"
 
@@ -593,31 +607,35 @@ savestate.load(Filename)
 rightmost = 0
 timeout = TimeoutConstant
 clearJoypad()
-local species = pool.species[pool.currentSpecies]
-local genome = species.genomes[pool.currentGenome]
-generateNetwork(genome)
-evaluateCurrent()
+
+--[[
+    pool.species = {}
+    pool.generation = 0
+    pool.innovationNum = NumOutputs
+    pool.currentSpecies = 1
+    pool.currentNetwork = 1
+    pool.currentFrame = 0
+]]
 
 
 -- a lot of gui updating code, but also handles running neural network/ indirectly updating when network has finished its run
 while true do
+    local species = pool.species[pool.currentSpecies]
+    local network = species.networks[pool.currentNetwork]
 	-- evaluate network every 5 frames to see next control that should be done
 	if pool.currentFrame%5 == 0 then
 		-- get controls neural network says to use
-		evaluateCurrent()
-	end
-
+		controller = evaluateNetwork(network)
+    end
+    pool.currentFrame = pool.currentFrame + 1
 	joypad.set(controller)
-
 	-- if mario has not moved to right, begin frame count down until considered timed out
 	getPositions()
 	if marioX > rightmost then
 		rightmost = marioX
 		timeout = TimeoutConstant
 	end
-	
 	timeout = timeout - 1
-	
 	-- give more lenience on timeout farther into the level you are
 	local timeoutBonus = pool.currentFrame / 4
 	if timeout + timeoutBonus <= 0 then
@@ -625,19 +643,18 @@ while true do
 		if rightmost > 4816 then
 			fitness = fitness + 1000
 		end
-		if fitness == 0 then
-			fitness = -1
-		end
 		-- fitness is the indicator of where the program is currently executing in this weird loop
-		genome.fitness = fitness
-		
-		-- handle if new fitness record
-		
+        network.fitness = fitness
+        print("Fitness: " .. network.fitness)
 		-- reset currentspecies and current genome and increment them until you find a non measure genome; once found, reset for new run
-
+        local nextNetworkFound = findNextNetwork(pool)
+        if not nextNetworkFound then
+            initNewGeneration()
+            savestate.load(Filename)
+            rightmost = 0
+            timeout = TimeoutConstant
+            clearJoypad()
+        end
     end
-    
-	pool.currentFrame = pool.currentFrame + 1
-
 	emu.frameadvance();
 end
