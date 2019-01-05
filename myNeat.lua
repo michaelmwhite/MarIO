@@ -147,20 +147,29 @@ function nextInnovationNum(network)
     return currentInnovationNum
 end
 
+function newNetwork()
+    local network = {}
+    network.connections = {}
+    -- first x ids are reserved for inputs, next y ids are reserved for outputs, anything after is hidden layer node
+    network.nodeCount = NumInputs + NumOutputs
+    network.fitness = 0
+    network.innovationNum = 0
+    return network
+end
+
 -- arrays in Lua begin with 1
-function newPool()
-    local pool = {}
+function initPool()
+    pool = {}
     pool.species = {}
     pool.generation = 0
-    pool.innovationNum = NumOutputs
     pool.currentSpecies = 1
     pool.currentNetwork = 1
     pool.currentFrame = 0
     for i=1,NumPopulations do
-        newNetwork = mutate(newNetwork())
+        local newNetwork = mutate(newNetwork())
         addToSpecies(newNetwork)
     end
-    return pool
+    print("Initialized pool with " .. #pool.species .. " species and " .. NumPopulations .. " networks")
 end
 
 function newSpecies()
@@ -170,15 +179,6 @@ function newSpecies()
     species.averageFitness = 0
     species.networks = {}
     return species
-end
-
-function newNetwork()
-    local network = {}
-    network.connections = {}
-    -- first x ids are reserved for inputs, next y ids are reserved for outputs, anything after is hidden layer node
-    network.nodeCount = NumInputs + NumOutputs
-    network.fitness = 0
-    return network
 end
 
 function copyNetwork(network)
@@ -244,10 +244,10 @@ function evaluateNetwork(network)
 
     local nodes = buildNodes(network)
     local inputs = getInputs()
-    if #inputs ~= NumInputs then
+    --[[if #inputs ~= NumInputs then
 		print("Incorrect number of neural network inputs.")
 		return
-    end
+    end]]
     -- fill in inputs
     for i=1,NumInputs do
         nodes[i].value = inputs[i]
@@ -335,7 +335,7 @@ function addConnectionMutate(network)
     while node1Id == node2Id do
         node2Id = math.random(network.nodeCount)
     end
-    local newConnection = newConnection()
+    local newConnection = newConnection(network)
     -- NOTE: CYCLICAL CONNECTIONS A PROBLEM - address in future, for now, will have value of 0.0 at time of evaluation
     newConnection.inputId = node1Id
     newConnection.outputId = node2Id
@@ -350,13 +350,13 @@ function addNodeMutate(network)
     network.nodeCount = network.nodeCount + 1
     local connection = network.connections[math.random(#network.connections)]
 
-    local connection1 = copyConnection()
+    local connection1 = copyConnection(connection)
     connection1.outputId = network.nodeCount
     connection1.weight = 1.0
     connection1.innovationNum = nextInnovationNum(network)
     table.insert(network.connections, connection1)
 
-    local connection2 = copyConnection()
+    local connection2 = copyConnection(connection)
     connection2.inputId = network.nodeCount
     connection2.innovationNum = nextInnovationNum(network)
     table.insert(network.connections, connection2)
@@ -390,6 +390,7 @@ function disableMutate(network)
 end
 
 function mutate(network)
+    --print("mutating network: " .. network.nodeCount)
     if math.random() < MutateConnectionsChance then
         connectionWeightsMutate(network)
     end
@@ -405,6 +406,7 @@ function mutate(network)
     if math.random() < DisableMutationChance then
         disableMutate(network)
     end
+    return network
 end
 
 -- return the number of disjoint genes between two sets of genes
@@ -427,7 +429,7 @@ function numDisjointOrExcess(connections1, connections2)
             disjointExcessCount = disjointExcessCount + 1
         end
     end
-    for i=1,#connection2 do
+    for i=1,#connections2 do
         if not innovations1[connections2[i].innovationNum] then
             disjointExcessCount = disjointExcessCount + 1
         end
@@ -443,7 +445,7 @@ function avgWeightsDiff(connections1, connections2)
     for i=1,#connections2 do
         innovations2[connections2[i].innovationNum] = connections2[i]
     end
-    for i=1,#connections1 then
+    for i=1,#connections1 do
         local connection2 = innovations2[connections1[i].innovationNum]
         if connection2 ~= nil then
             sum = sum + math.abs(connections1[i].weight - connection2.weight)
@@ -456,7 +458,7 @@ end
 -- determin if same species - roughly equivalent of equation 1 in Stanley's paper
 function isSameSpecies(network1, network2)
     local disjointDelta = DeltaDisjoint * numDisjointOrExcess(network1.connections, network2.connections)
-    local weightDelta = DeltaWeights * avgWeightsDiff(network1.connections, nertwork2.connections)
+    local weightDelta = DeltaWeights * avgWeightsDiff(network1.connections, network2.connections)
     return disjointDelta + weightDelta < DeltaThreshold
 end
 
@@ -602,29 +604,21 @@ end
 -- BEGINNING OF "MAIN()"
 
 --INITIALIZE RUN CODE - TODO - REWORK!
-pool = newPool()
+initPool()
 savestate.load(Filename)
 rightmost = 0
 timeout = TimeoutConstant
 clearJoypad()
 
---[[
-    pool.species = {}
-    pool.generation = 0
-    pool.innovationNum = NumOutputs
-    pool.currentSpecies = 1
-    pool.currentNetwork = 1
-    pool.currentFrame = 0
-]]
-
-
 -- a lot of gui updating code, but also handles running neural network/ indirectly updating when network has finished its run
 while true do
+    print("@ beginning of while loop")
     local species = pool.species[pool.currentSpecies]
     local network = species.networks[pool.currentNetwork]
 	-- evaluate network every 5 frames to see next control that should be done
 	if pool.currentFrame%5 == 0 then
-		-- get controls neural network says to use
+        -- get controls neural network says to use
+        print("Evaluating network " .. pool.currentNetwork .. " for species " .. pool.currentSpecies)
 		controller = evaluateNetwork(network)
     end
     pool.currentFrame = pool.currentFrame + 1
@@ -636,7 +630,8 @@ while true do
 		timeout = TimeoutConstant
 	end
 	timeout = timeout - 1
-	-- give more lenience on timeout farther into the level you are
+    -- give more lenience on timeout farther into the level you are
+    print("about to check timeout")
 	local timeoutBonus = pool.currentFrame / 4
 	if timeout + timeoutBonus <= 0 then
 		local fitness = rightmost - pool.currentFrame / 2
@@ -656,5 +651,7 @@ while true do
             clearJoypad()
         end
     end
-	emu.frameadvance();
+    print("emu pre-frameadvance")
+    emu.frameadvance()
+    print("emu post-frameadvance")
 end
