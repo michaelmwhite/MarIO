@@ -186,6 +186,7 @@ function copyNetwork(network)
     newNetwork.connections = network.connections
     newNetwork.nodeCount = network.nodeCount
     newNetwork.fitness = network.fitness
+    network.innovationNum = network.innovationNum
     return newNetwork
 end
 
@@ -317,7 +318,7 @@ function connectionWeightsMutate(network)
     for i=1,#network.connections do
         local connection = network.connections[i]
         if math.random() < PerturbChance then
-            connection.weight = connection.weight + (math.random() - .5) * step
+            connection.weight = connection.weight + (math.random() - .5) * StepSize
         else
             connection.weight = (math.random() - .5) * 2
         end
@@ -591,6 +592,7 @@ function findNextNetwork(pool)
     local species = pool.species[pool.currentSpecies]
     if species.networks[pool.currentNetwork + 1] ~= nil then
         pool.currentNetwork = pool.currentNetwork + 1
+        print("found next network: " .. pool.currentNetwork .. " in species: " .. pool.currentSpecies)
         return true
     elseif pool.species[pool.currentSpecies + 1] ~= nil then
         pool.currentSpecies = pool.currentSpecies + 1
@@ -612,13 +614,11 @@ clearJoypad()
 
 -- a lot of gui updating code, but also handles running neural network/ indirectly updating when network has finished its run
 while true do
-    print("@ beginning of while loop")
     local species = pool.species[pool.currentSpecies]
     local network = species.networks[pool.currentNetwork]
 	-- evaluate network every 5 frames to see next control that should be done
 	if pool.currentFrame%5 == 0 then
         -- get controls neural network says to use
-        print("Evaluating network " .. pool.currentNetwork .. " for species " .. pool.currentSpecies)
 		controller = evaluateNetwork(network)
     end
     pool.currentFrame = pool.currentFrame + 1
@@ -631,7 +631,6 @@ while true do
 	end
 	timeout = timeout - 1
     -- give more lenience on timeout farther into the level you are
-    print("about to check timeout")
 	local timeoutBonus = pool.currentFrame / 4
 	if timeout + timeoutBonus <= 0 then
 		local fitness = rightmost - pool.currentFrame / 2
@@ -645,13 +644,12 @@ while true do
         local nextNetworkFound = findNextNetwork(pool)
         if not nextNetworkFound then
             initNewGeneration()
-            savestate.load(Filename)
-            rightmost = 0
-            timeout = TimeoutConstant
-            clearJoypad()
         end
+        pool.currentFrame = 0
+        savestate.load(Filename)
+        rightmost = 0
+        timeout = TimeoutConstant
+        clearJoypad()
     end
-    print("emu pre-frameadvance")
     emu.frameadvance()
-    print("emu post-frameadvance")
 end
