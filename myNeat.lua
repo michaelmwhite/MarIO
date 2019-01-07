@@ -24,16 +24,16 @@ NumInputs = (BoxRadius*2+1)*(BoxRadius*2+1)+1
 NumOutputs = #ButtonNames
 
 NumPopulations = 100
-DeltaDisjoint = 2.0
-DeltaWeights = 0.4
-DeltaThreshold = 1.0
+DeltaDisjoint = 1.0
+DeltaWeights = 0.2
+DeltaThreshold = 5
 
-StaleSpecies = 15
+StaleSpecies = 5
 
 MutateConnectionsChance = 0.25
 PerturbChance = 0.90
 CrossoverChance = 0.75
-LinkMutationChance = 3.0
+LinkMutationChance = 2.0
 NodeMutationChance = 0.50
 StepSize = 0.1
 DisableMutationChance = 0.4
@@ -355,8 +355,10 @@ function newSpecies()
 end
 
 function copyNetwork(network)
-    local newNetwork = {}
-    newNetwork.connections = network.connections
+    local newNetwork = newNetwork()
+    for i=1,#network.connections do
+        table.insert(newNetwork.connections, copyConnection(network.connections[i]))
+    end
     newNetwork.nodeCount = network.nodeCount
     newNetwork.fitness = network.fitness
     newNetwork.innovationNum = network.innovationNum
@@ -394,22 +396,18 @@ end
 -- rather than have to keep track of nodes and combinations, generate nodes in network at time of evaluation
 function buildNodes(network)
     local nodes = {}
-    -- generate input and output nodes - this part is not chronologically ordered
-    for i=1,NumInputs+NumOutputs do
-        nodes[i] = newNode()
-    end
     -- NOTE: important not to ignore disabled when building node network - this should be entirely deterministic as index numbers represent
     -- id numbers in my system
+    for i=1,network.nodeCount do
+        nodes[i] = newNode()
+    end
     for i=1,#network.connections do 
         local connection = network.connections[i]
-        -- make all appropriate nodes
-        if nodes[connection.inputId] == nil then
-            nodes[connection.inputId] = newNode()
+        if connection.outputId > network.nodeCount then
+            print("nodeCount: " .. network.nodeCount .. " connection.outputId: " .. connection.outputId)
         end
-        if nodes[connection.outputId] == nil then
-            nodes[connection.outputId] = newNode()
-        end
-        table.insert(nodes[connection.outputId].inputConnections, connection)
+        local outputNode = nodes[connection.outputId]
+        table.insert(outputNode.inputConnections, connection)
     end
     return nodes
 end
@@ -428,6 +426,7 @@ function evaluateNetwork(network)
     -- calculate hidden layer nodes
     for i=NumInputs+NumOutputs+1,#nodes do
         local sum = 0
+        --print("evaluating: " .. i .. " of total nodes: " .. #nodes)
         for j=1,#nodes[i].inputConnections do
             local connection = nodes[i].inputConnections[j]
             if connection.enabled then
@@ -484,6 +483,7 @@ function crossover(network1, network2)
     end
     local child = copyNetwork(network1)
     child.connections = childConnections
+    child.nodeCount = math.max(network1.nodeCount, network2.nodeCount)
     return child
 end
 
@@ -508,7 +508,7 @@ function addConnectionMutate(network)
     local node1Id = math.random(network.nodeCount)
     local node2Id = math.random(network.nodeCount)
     -- ensure nodes are different and output node is not to an initial input node
-    while node1Id == node2Id or node2Id < NumInputs do
+    while node1Id == node2Id or node2Id <= NumInputs do
         node2Id = math.random(network.nodeCount)
     end
     local newConnection = newConnection(network)
@@ -537,6 +537,16 @@ function addNodeMutate(network)
     connection2.inputId = network.nodeCount
     connection2.innovationNum = nextInnovationNum(network)
     table.insert(network.connections, connection2)
+
+    if connection1.outputId > network.nodeCount then
+        print("connection1 outputId: " .. connection1.outputId .. " and node count: " .. network.nodeCount) 
+    end
+    if connection2.outputId > network.nodeCount then
+        print("connection2 outputId: " .. connection2.outputId .. " and node count: " .. network.nodeCount) 
+    end
+
+    connection.enabled = false
+    return network
 end
 
 -- mutate to either enable or disable a connection
@@ -563,7 +573,7 @@ function disableMutate(network)
     if #enabledConnections == 0 then
         return
     end
-    enabledConnections[math.random(#enabledConnections)].enabled = true
+    enabledConnections[math.random(#enabledConnections)].enabled = false
 end
 
 function mutate(network)
@@ -579,7 +589,7 @@ function mutate(network)
         p = p - 1
     end
     if math.random() < NodeMutationChance then
-        addNodeMutate(network)
+        network = addNodeMutate(network)
     end
     if math.random() < EnableMutationChance then
         enableMutate(network)
@@ -650,7 +660,7 @@ function sortSpeciesNetworks(speciesTable)
         table.sort(speciesTable[i].networks, function(a,b)
             return (a.fitness > b.fitness)
         end)
-        print("best fitness for species " .. i .. ": " .. speciesTable[i].networks[1].fitness)
+        print("best fitness for species " .. i .. ": " .. speciesTable[i].networks[1].fitness .. " of totalsize: " .. #speciesTable[i].networks)
         print("worst fitness for species " .. i .. ": " .. speciesTable[i].networks[#speciesTable[i].networks].fitness)
     end
 end
@@ -669,11 +679,14 @@ end
 
 -- remove lower 50% of each species
 function cullSpeciesNetworks(speciesTable)
-    for i=1,#speciesTable do
+    for i=#speciesTable,1 do
         local species = speciesTable[i]
+        print("culling species: " .. i)
         -- TODO: ATTEMPT TO ACCESS NIL VALUE SPECIES?!? - happened because no species improved and all were removed for being stale?
         for j=#species.networks,#species.networks/2+1 do
-            table.remove(speciesTable, j)
+            if j>1 then
+                table.remove(speciesTable, j)
+            end
         end
     end
 end
@@ -688,7 +701,7 @@ function breedChild(species)
     else
         child = copyNetwork(species.networks[math.random(#species.networks)])
     end
-    mutate(child)
+    child = mutate(child)
     return child
 end
 
@@ -699,6 +712,7 @@ function removeStaleSpecies(speciesTable)
         if species.prevMaxFitness > species.networks[1].fitness then
             species.staleness = species.staleness + 1
             if species.staleness > StaleSpecies then
+                print("removing stale species: " .. i)
                 table.remove(speciesTable, i)
             end
         else
@@ -710,6 +724,7 @@ end
 
 -- sort passed in genome to appropriate species
 function addToSpecies(network)
+    --print("pool.species size: " .. #pool.species)
     for i=1,#pool.species do
         if isSameSpecies(pool.species[i].networks[1], network) then
             table.insert(pool.species[i].networks, network)
@@ -779,6 +794,7 @@ function findNextNetwork(pool)
         return true
     elseif pool.species[pool.currentSpecies + 1] ~= nil then
         pool.currentSpecies = pool.currentSpecies + 1
+        pool.currentNetwork = 0
         return findNextNetwork(pool)
     else
         return false
