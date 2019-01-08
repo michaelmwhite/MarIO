@@ -128,183 +128,6 @@ function getInputs()
 			end
 		end
 	end
-	
-	--mariovx = memory.read_s8(0x7B)
-	--mariovy = memory.read_s8(0x7D)
-    --[[print("inputs: ")
-    for k, v in pairs(inputs) do
-        print(k .. " - " .. v)
-    end]]
-    --[[inputs: 
-        1 - 0
-        2 - 0
-        3 - 0
-        4 - 0
-        5 - 0
-        6 - 0
-        7 - 0
-        8 - 0
-        9 - 0
-        10 - 0
-        11 - 0
-        12 - 0
-        13 - 0
-        14 - 0
-        15 - 0
-        16 - 0
-        17 - 0
-        18 - 0
-        19 - 0
-        20 - 0
-        21 - 0
-        22 - 0
-        23 - 0
-        24 - 0
-        25 - 0
-        26 - 0
-        27 - 0
-        28 - 0
-        29 - 0
-        30 - 0
-        31 - 0
-        32 - 0
-        33 - 0
-        34 - 0
-        35 - 0
-        36 - 0
-        37 - 0
-        38 - 0
-        39 - 0
-        40 - 0
-        41 - 0
-        42 - 0
-        43 - 0
-        44 - 0
-        45 - 0
-        46 - 0
-        47 - 0
-        48 - 0
-        49 - 0
-        50 - 0
-        51 - 0
-        52 - 0
-        53 - 0
-        54 - 0
-        55 - 0
-        56 - 0
-        57 - 0
-        58 - 0
-        59 - 0
-        60 - 0
-        61 - 0
-        62 - 0
-        63 - 0
-        64 - 0
-        65 - 0
-        66 - 0
-        67 - 0
-        68 - 0
-        69 - 0
-        70 - 0
-        71 - 0
-        72 - 0
-        73 - 0
-        74 - 0
-        75 - 0
-        76 - 0
-        77 - 0
-        78 - 0
-        79 - 0
-        80 - 0
-        81 - 0
-        82 - 0
-        83 - 0
-        84 - 0
-        85 - 0
-        86 - 0
-        87 - 0
-        88 - 0
-        89 - 0
-        90 - 0
-        91 - 0
-        92 - 0
-        93 - 0
-        94 - 0
-        95 - 0
-        96 - 0
-        97 - 0
-        98 - 0
-        99 - 0
-        100 - 0
-        101 - 0
-        102 - 0
-        103 - 0
-        104 - 0
-        105 - 0
-        106 - 0
-        107 - 0
-        108 - 0
-        109 - 0
-        110 - 1
-        111 - 1
-        112 - 1
-        113 - 1
-        114 - 1
-        115 - 1
-        116 - 1
-        117 - 1
-        118 - 0
-        119 - 0
-        120 - 0
-        121 - 0
-        122 - 0
-        123 - 0
-        124 - 0
-        125 - 0
-        126 - 0
-        127 - 0
-        128 - 0
-        129 - 0
-        130 - 0
-        131 - 0
-        132 - 0
-        133 - 0
-        134 - 0
-        135 - 0
-        136 - 0
-        137 - 0
-        138 - 0
-        139 - 0
-        140 - 0
-        141 - 0
-        142 - 0
-        143 - 0
-        144 - 0
-        145 - 0
-        146 - 0
-        147 - 0
-        148 - 0
-        149 - 0
-        150 - 0
-        151 - 0
-        152 - 0
-        153 - 0
-        154 - 0
-        155 - 0
-        156 - 0
-        157 - 0
-        158 - 0
-        159 - 0
-        160 - 0
-        161 - 0
-        162 - 0
-        163 - 0
-        164 - 0
-        165 - 0
-        166 - 0
-        167 - 0
-        168 - 0
-        169 - 0]]
 	return inputs
 end
 
@@ -366,7 +189,6 @@ function copyNetwork(network)
 end
 
 function newConnection(network)
-    -- print("newConnection")
     local connection = {}
     connection.inputId = 0
     connection.outputId = 0
@@ -426,11 +248,9 @@ function evaluateNetwork(network)
     -- calculate hidden layer nodes
     for i=NumInputs+NumOutputs+1,#nodes do
         local sum = 0
-        --print("evaluating: " .. i .. " of total nodes: " .. #nodes)
         for j=1,#nodes[i].inputConnections do
             local connection = nodes[i].inputConnections[j]
             if connection.enabled then
-                -- print("connection.inputId: " .. connection.inputId)
                 sum = sum + connection.weight * nodes[connection.inputId].value
             end
         end
@@ -445,7 +265,6 @@ function evaluateNetwork(network)
                 sum = sum + connection.weight * nodes[connection.inputId].value
             end
         end
-        --print("outputs sum: " .. sum)
         nodes[i].value = sigmoid(sum)
         -- write command for controller
         local button = "P1 " .. ButtonNames[i-NumInputs]
@@ -520,7 +339,6 @@ end
 
 -- mutate a single connection to become two connections with a node inbetween that is mathematically identical for the current run
 function addNodeMutate(network)
-    -- print("addNodeMutate")
     if #network.connections == 0 then
         return
     end
@@ -577,7 +395,6 @@ function disableMutate(network)
 end
 
 function mutate(network)
-    --print("mutating network: " .. network.nodeCount)
     if math.random() < MutateConnectionsChance then
         connectionWeightsMutate(network)
     end
@@ -723,8 +540,8 @@ function removeStaleSpecies(speciesTable)
 end
 
 -- sort passed in genome to appropriate species
+-- TODO: realized an issue with my species code - new species are made each time so staleness isn't a factor
 function addToSpecies(network)
-    --print("pool.species size: " .. #pool.species)
     for i=1,#pool.species do
         if isSameSpecies(pool.species[i].networks[1], network) then
             table.insert(pool.species[i].networks, network)
@@ -754,6 +571,7 @@ function initNewGeneration()
     end
     globalAverageFitness = globalAverageFitness / #pool.species
     for i=1,#pool.species do
+        -- TODO: if species starts at fitness below average fitness, speciation won't protect?
         local numChildren = pool.species[i].averageFitness * #pool.species[i].networks / globalAverageFitness
         for j=1,numChildren do
             table.insert(nextGenNetworks, breedChild(pool.species[i]))
@@ -819,10 +637,6 @@ while true do
 	if pool.currentFrame%5 == 0 then
         -- get controls neural network says to use
         controller = evaluateNetwork(network)
-        --[[print("controller: ")
-        for k, v in pairs(controller) do
-            print(k .. " - " .. tostring(v))
-        end]]
     end
     pool.currentFrame = pool.currentFrame + 1
 	joypad.set(controller)
