@@ -4,8 +4,6 @@
 -- Have a save "DP1.state" set to the beginning of a level, saved where this script is.
 -- Load the script in BizHawk's Lua Console when Super Mario is loaded.
 
-print(gameinfo.getromname())
-
 Filename = "DP1.state"
 ButtonNames = {
     "A",
@@ -153,11 +151,10 @@ function newNetwork()
     return network
 end
 
--- arrays in Lua begin with 1
 function initPool()
     pool = {}
     pool.species = {}
-    pool.generation = 0
+    pool.generation = 1
     pool.currentSpecies = 1
     pool.currentNetwork = 1
     pool.currentFrame = 0
@@ -225,9 +222,6 @@ function buildNodes(network)
     end
     for i=1,#network.connections do 
         local connection = network.connections[i]
-        if connection.outputId > network.nodeCount then
-            print("nodeCount: " .. network.nodeCount .. " connection.outputId: " .. connection.outputId)
-        end
         local outputNode = nodes[connection.outputId]
         table.insert(outputNode.inputConnections, connection)
     end
@@ -306,7 +300,6 @@ function crossover(network1, network2)
     return child
 end
 
--- if mutating connections, change gene weights in genome
 function connectionWeightsMutate(network)
     for i=1,#network.connections do
         local connection = network.connections[i]
@@ -318,10 +311,9 @@ function connectionWeightsMutate(network)
     end
 end
 
--- add a new connection to the genome between two random nodes
 function addConnectionMutate(network)
     if network.nodeCount < 2 then
-        print("nodeCount should always be greater than 1")
+        print("NodeCount should always be greater than 1")
         return
     end
     local node1Id = math.random(network.nodeCount)
@@ -356,18 +348,10 @@ function addNodeMutate(network)
     connection2.innovationNum = nextInnovationNum(network)
     table.insert(network.connections, connection2)
 
-    if connection1.outputId > network.nodeCount then
-        print("connection1 outputId: " .. connection1.outputId .. " and node count: " .. network.nodeCount) 
-    end
-    if connection2.outputId > network.nodeCount then
-        print("connection2 outputId: " .. connection2.outputId .. " and node count: " .. network.nodeCount) 
-    end
-
     connection.enabled = false
     return network
 end
 
--- mutate to either enable or disable a connection
 function enableMutate(network)
     local disabledConnections = {}
     for i=1,#network.connections do
@@ -417,7 +401,7 @@ function mutate(network)
     return network
 end
 
--- return the number of disjoint genes between two sets of genes
+-- return the number of disjoint + excess genes between two sets of genes
 function numDisjointOrExcess(connections1, connections2)
     local disjointExcessCount = 0
     local innovations1 = {}
@@ -445,7 +429,7 @@ function numDisjointOrExcess(connections1, connections2)
     return disjointExcessCount
 end
 
--- calculates average difference in weights per genes in genomes
+-- calculates average difference in weights per connections in a network
 function avgWeightsDiff(connections1, connections2)
     local sum = 0
     local numDiff = 0
@@ -463,26 +447,23 @@ function avgWeightsDiff(connections1, connections2)
     return sum / numDiff
 end
 	
--- determin if same species - roughly equivalent of equation 1 in Stanley's paper
+-- determine if same species - roughly equivalent of equation 1 in Stanley's paper
 function isSameSpecies(network1, network2)
     local disjointDelta = DeltaDisjoint * numDisjointOrExcess(network1.connections, network2.connections)
     local weightDelta = DeltaWeights * avgWeightsDiff(network1.connections, network2.connections)
     return disjointDelta + weightDelta < DeltaThreshold
 end
 
--- rank all genomes regardless of species
 function sortSpeciesNetworks(speciesTable)
     for i=1,#speciesTable do
         -- put best fitnesses at lower indexes
         table.sort(speciesTable[i].networks, function(a,b)
             return (a.fitness > b.fitness)
         end)
-        print("best fitness for species " .. i .. ": " .. speciesTable[i].networks[1].fitness .. " of totalsize: " .. #speciesTable[i].networks)
-        print("worst fitness for species " .. i .. ": " .. speciesTable[i].networks[#speciesTable[i].networks].fitness)
+        print("Best fitness for species " .. i .. ": " .. speciesTable[i].networks[1].fitness .. " and worst: " .. speciesTable[i].networks[#speciesTable[i].networks].fitness)
     end
 end
 
--- calculate average rank of a species
 function calculateAverageFitnesses(speciesTable)
     for i=1,#speciesTable do
         local species = speciesTable[i]
@@ -498,8 +479,6 @@ end
 function cullSpeciesNetworks(speciesTable)
     for i=#speciesTable,1 do
         local species = speciesTable[i]
-        print("culling species: " .. i)
-        -- TODO: ATTEMPT TO ACCESS NIL VALUE SPECIES?!? - happened because no species improved and all were removed for being stale?
         for j=#species.networks,#species.networks/2+1 do
             if j>1 then
                 table.remove(speciesTable, j)
@@ -529,7 +508,6 @@ function removeStaleSpecies(speciesTable)
         if species.prevMaxFitness > species.networks[1].fitness then
             species.staleness = species.staleness + 1
             if species.staleness > StaleSpecies then
-                print("removing stale species: " .. i)
                 table.remove(speciesTable, i)
             end
         else
@@ -539,7 +517,7 @@ function removeStaleSpecies(speciesTable)
     end
 end
 
--- sort passed in genome to appropriate species
+-- sort passed in networks to appropriate species
 -- TODO: realized an issue with my species code - new species are made each time so staleness isn't a factor
 function addToSpecies(network)
     for i=1,#pool.species do
@@ -563,7 +541,6 @@ function initNewGeneration()
     -- calculate average fitness of each species
     calculateAverageFitnesses(pool.species)
     -- breed children for new generation - num children is a function of average fitness of that species
-        -- num children = total fitness/average fitness of all species
     local nextGenNetworks = {}
     local globalAverageFitness = 0
     for i=1,#pool.species do
@@ -592,6 +569,7 @@ function initNewGeneration()
     for i=1,#nextGenNetworks do
         addToSpecies(nextGenNetworks[i])
     end
+    print("\nGeneration: " .. pool.generation)
 end
 
 -- reset control inputs to all false
@@ -608,7 +586,6 @@ function findNextNetwork(pool)
     local species = pool.species[pool.currentSpecies]
     if species.networks[pool.currentNetwork + 1] ~= nil then
         pool.currentNetwork = pool.currentNetwork + 1
-        print("found next network: " .. pool.currentNetwork .. " in species: " .. pool.currentSpecies)
         return true
     elseif pool.species[pool.currentSpecies + 1] ~= nil then
         pool.currentSpecies = pool.currentSpecies + 1
@@ -620,22 +597,20 @@ function findNextNetwork(pool)
 end
 
 -- NOTE: END OF NN CODE
--- BEGINNING OF "MAIN()"
+-- BEGINNING OF "MAIN"
 
---INITIALIZE RUN CODE - TODO - REWORK!
+print(gameinfo.getromname())
 initPool()
 savestate.load(Filename)
 rightmost = 0
 timeout = TimeoutConstant
 clearJoypad()
 
--- a lot of gui updating code, but also handles running neural network/ indirectly updating when network has finished its run
 while true do
     local species = pool.species[pool.currentSpecies]
     local network = species.networks[pool.currentNetwork]
 	-- evaluate network every 5 frames to see next control that should be done
 	if pool.currentFrame%5 == 0 then
-        -- get controls neural network says to use
         controller = evaluateNetwork(network)
     end
     pool.currentFrame = pool.currentFrame + 1
@@ -654,10 +629,9 @@ while true do
 		if rightmost > 4816 then
 			fitness = fitness + 1000
 		end
-		-- fitness is the indicator of where the program is currently executing in this weird loop
         network.fitness = fitness
-        print("Fitness: " .. network.fitness)
-		-- reset currentspecies and current genome and increment them until you find a non measure genome; once found, reset for new run
+        print("Fitness: " .. network.fitness .. " for network: " .. pool.currentNetwork .. " of species: " .. pool.currentSpecies)
+
         local nextNetworkFound = findNextNetwork(pool)
         if not nextNetworkFound then
             initNewGeneration()
