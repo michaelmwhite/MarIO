@@ -5,4 +5,4 @@ This project was inspired by [SethBling](https://www.youtube.com/watch?v=qv6UVOQ
 
 Network playing Super Mario after training for 15 hours:
 
-![](https://github.com/michaelmwhite/MarIO/blob/my-neat-branch/recordings/trained-network.gif)
+![](https://github.com/michaelmwhite/MarIO/blob/master/recordings/trained-network.gif)
